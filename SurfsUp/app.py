@@ -1,21 +1,22 @@
 # Import the dependencies.
-from flask import Flask, jsonify
+import os
 import numpy as np
 import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
-import datetime as dt
+from flask import Flask, jsonify
 
 #################################################
 # Database Setup
 #################################################
-engine = create_engine("sqlite:///Resources/hawaii.sqlite")
+db_path = r"SurfsUp/Resources/hawaii.sqlite"
+engine = create_engine(f"sqlite:///{db_path}")
 
 # reflect an existing database into a new model
 Base = automap_base()
 
-# reflect the tables
+# reflect the tables 
 Base.prepare(autoload_with=engine)
 
 # Save references to each table
@@ -30,105 +31,70 @@ session = Session(engine)
 #################################################
 app = Flask(__name__)
 
-
-
 #################################################
 # Flask Routes
 #################################################
+
 @app.route("/")
 def home():
     """List all available api routes."""
     return (
-        f"Hawaii API<br/>"
-        f"Available Routes:<br/>"
-        f"/api/v1.0/precipitation<br/>"
-        f"/api/v1.0/stations<br/>"
-        f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/start-date (replace start date in yyyy-mm-dd format)<br/>"
-        f"/api/v1.0/start-date/end-date (replace start and end date in yyyy-mm-dd format)"
+        "Hawaii API<br/>"
+        "Available Routes:<br/>"
+        "<a href='/api/v1.0/precipitation'>/api/v1.0/precipitation</a><br/>"
+        "<a href='/api/v1.0/stations'>/api/v1.0/stations</a><br/>"
+        "<a href='/api/v1.0/tobs'>/api/v1.0/tobs</a><br/>"
+        "/api/v1.0/<start_date> (replace start_date in yyyy-mm-dd format)<br/>"
+        "/api/v1.0/<start_date>/<end_date> (replace start_date and end_date in yyyy-mm-dd format)"
     )
 
 @app.route("/api/v1.0/precipitation")
-def precipitation():
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
-
-    """Return a list"""
-    results = (session.query(measurement.date, func.max(measurement.prcp)).filter(measurement.date>='2016-08-23').group_by(measurement.date).all())
-    results
-
-    session.close()
+def get_precipitation():
+    results = session.query(
+        measurement.date, func.max(measurement.prcp)
+    ).filter(measurement.date >= "2016-08-23").group_by(measurement.date).all()
 
     all_precipitation = []
     for date, prcp in results:
-        precipitation_dict = {}
-        precipitation_dict["date"] = date
-        precipitation_dict["prcp"] = prcp
+        precipitation_dict = {"date": date, "prcp": prcp}
         all_precipitation.append(precipitation_dict)
 
     return jsonify(all_precipitation)
 
 @app.route("/api/v1.0/stations")
-def stations():
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
-
-    """Return a list"""
+def get_stations():
     results = session.query(station.station, station.name).all()
 
-    session.close()
-
-    # Convert list of tuples into normal list
     station_names = list(np.ravel(results))
-
     return jsonify(station_names)
 
 @app.route("/api/v1.0/tobs")
-def tobs():
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
+def get_tobs():
+    results = session.query(
+        measurement.tobs, measurement.date
+    ).filter(measurement.station == "USC00519281", measurement.date >= "2016-08-18").all()
 
-    """Return a list"""
-    results = session.query(measurement.tobs, measurement.date).filter(measurement.station=='USC00519281', measurement.date >= '2016-08-18').all()
-
-    session.close()
-
-    # Convert list of tuples into normal list
     temp = list(np.ravel(results))
-
     return jsonify(temp)
 
-@app.route("/api/v1.0/<start>")
-def start(start):
+@app.route("/api/v1.0/<start_date>")
+def get_start_data(start_date):
+    
+    results = session.query(
+        func.min(measurement.tobs), func.max(measurement.tobs), func.avg(measurement.tobs)
+    ).filter(measurement.date >= start_date).all()
 
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
+    start_data = list(np.ravel(results))
+    return jsonify(start_data)
 
-    """Return a list"""
-    results = session.query(measurement.date,func.min(measurement.tobs), func.max(measurement.tobs), func.avg(measurement.tobs)).filter(measurement.date >= start).all()
+@app.route("/api/v1.0/<start_date>/<end_date>")
+def get_start_end_data(start_date, end_date):
+    results = session.query(
+        func.min(measurement.tobs), func.max(measurement.tobs), func.avg(measurement.tobs)
+    ).filter(measurement.date.between(start_date, end_date)).all()
 
-    session.close()
+    end_data = list(np.ravel(results))
+    return jsonify(end_data)
 
-    # Convert list of tuples into normal list
-    strt = list(np.ravel(results))
-
-    return jsonify(strt)
-
-@app.route("/api/v1.0/<start>/<end>")
-def end(start, end):
-
-    # Create our session (link) from Python to the DB
-    session = Session(engine)
-
-    """Return a list"""
-    results = session.query(measurement.date,func.min(measurement.tobs), func.max(measurement.tobs), func.avg(measurement.tobs)).filter(measurement.date.between(start, end)).all()
-
-    session.close()
-
-    # Convert list of tuples into normal list
-    endd = list(np.ravel(results))
-
-    return jsonify(endd)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
